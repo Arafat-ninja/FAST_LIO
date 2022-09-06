@@ -147,7 +147,7 @@ $ rosbag record xxx.bag
 
 **经测试fast-lio接受的livox雷达的点云消息不是传统的PointcCloud2类型，而是livox自定义的CustomMsg类型,IMU数据依旧是ros的sensor/Imu类型**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 19:53:11.png)
+![](/home/arafat/FAST_LIO/picture/Screenshot 2022-08-18 19:53:11.png)
 
  **CustomMsg格式**
 
@@ -180,7 +180,7 @@ uint8 line              # laser number in lidar
 
 **在fast-lio2中启动mapping_avia.launch或者mapping_horizon.launch（这两个launch文件是使用固态激光雷达）所以fast-lio2框架接收的固态激光雷达的点运数据一定是CustomMsg，当发布的消息的类型如果是pointcloud2类型时，会出现以下报错：lasermapping节点接收数据格式出错**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 20:21:16.png)
+![](/home/arafat/FAST_LIO/picture/Screenshot 2022-08-18 20:21:16.png)
 
 
 
@@ -203,13 +203,13 @@ $ roslaunch livox_ros_driver livox_lidar_msg.launch
 
 **下面以 Horizon 在 0.1s 的扫描图案来说明点云分布。Horizon 在中间区域的扫描密度大，扫描线间隔平均约 0.2°（主要在 0.1°-0.3° 范围内），超过常见机械旋转式 64 线激光雷达。两边圆形区域的扫描密度比中间低，扫 描线间隔平均在 0.4°（主要在 0.2°-0.8° 范围内），0.1s 的综合扫描效果与常见机械旋转式 64 线激光雷达相当。 0.1s 时间内 Horizon 点云分布图如下：（坐标单位：度）**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 17:40:42.png)
+![](/home/arafat/FAST_LIO/picture/Screenshot 2022-08-18 17:40:42.png)
 
 
 
 **下图给出了不同积分时间下 Horizon 的视场覆盖率，和当前市场上常见的几款多线机械旋转式激光探测测距仪的对比。从图中可以看出，当积分时间小于 0.1s 时，Horizon 的视场覆盖率接近 60%，即与常见 64 线机械旋转式激光雷达相当；当积分时间继续增大，达到 0.5s 左右时，视场覆盖率将会接近 100%，即视场中几乎所有区域都会覆盖到。**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 17:44:00.png)
+![](/home/arafat/FAST_LIO/picture/Screenshot 2022-08-18 17:44:00.png)
 
 Horizon 系列点云参数如下表所示：
 
@@ -248,14 +248,14 @@ $ ./livox_viewer.sh
 
 **以下是我本地的ip配置**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 18:57:11.png)
+![](/home/arafat/FAST_LIO/picture/Screenshot 2022-08-18 18:57:11.png)
 
 **这是livox_horizon中的参数信息以及静态ip配置**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 18:58:08.png)
+![](/home/arafat/FAST_LIO/picture/Screenshot 2022-08-18 18:58:08.png)
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 18:58:33.png)
+![](/home/arafat/FAST_LIO/picture/Screenshot 2022-08-18 18:58:33.png)
 
 **下图是livox viewer的显示界面**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 19:32:57.png)
+![](/home/arafat/FAST_LIO/picture/Screenshot 2022-08-18 19:32:57.png)
