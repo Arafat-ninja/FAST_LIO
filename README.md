@@ -144,7 +144,7 @@ $ rosbag record xxx.bag
 
 **经测试fast-lio接受的livox雷达的点云消息不是传统的PointcCloud2类型，而是livox自定义的CustomMsg类型,IMU数据依旧是ros的sensor/Imu类型**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 19:53:11.png)
+![](https://github.com/Arafat-ninja/FAST_LIO/blob/master/picture/Screenshot%202022-08-18%2019:53:11.png)
 
  **CustomMsg格式**
 
@@ -177,7 +177,7 @@ uint8 line              # laser number in lidar
 
 **在fast-lio2中启动mapping_avia.launch或者mapping_horizon.launch（这两个launch文件是使用固态激光雷达）所以fast-lio2框架接收的固态激光雷达的点运数据一定是CustomMsg，当发布的消息的类型如果是pointcloud2类型时，会出现以下报错：lasermapping节点接收数据格式出错**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 20:21:16.png)
+![](https://github.com/Arafat-ninja/FAST_LIO/blob/master/picture/Screenshot%202022-08-18%2020:21:16.png)
 
 
 
@@ -245,14 +245,14 @@ $ ./livox_viewer.sh
 
 **以下是我本地的ip配置**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 18:57:11.png)
+![](https://github.com/Arafat-ninja/FAST_LIO/blob/master/picture/Screenshot%202022-08-18%2018:57:11.png)
 
 **这是livox_horizon中的参数信息以及静态ip配置**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 18:58:08.png)
+![](https://github.com/Arafat-ninja/FAST_LIO/blob/master/picture/Screenshot%202022-08-18%2018:58:08.png)
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 18:58:33.png)
+![](https://github.com/Arafat-ninja/FAST_LIO/blob/master/picture/Screenshot%202022-08-18%2018:58:33.png)
 
 **下图是livox viewer的显示界面**
 
-![](/home/arafat/Pictures/Screenshot 2022-08-18 19:32:57.png)
+![](https://github.com/Arafat-ninja/FAST_LIO/blob/master/picture/Screenshot%202022-08-18%2019:32:57.png)
