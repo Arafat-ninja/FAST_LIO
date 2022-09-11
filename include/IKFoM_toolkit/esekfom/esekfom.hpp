@@ -1,50 +1,13 @@
-/*
- *  Copyright (c) 2019--2023, The University of Hong Kong
- *  All rights reserved.
- *
- *  Author: Dongjiao HE <hdj65822@connect.hku.hk>
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted provided that the following conditions
- *  are met:
- *
- *   * Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above
- *     copyright notice, this list of conditions and the following
- *     disclaimer in the documentation and/or other materials provided
- *     with the distribution.
- *   * Neither the name of the Universitaet Bremen nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
- *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- *  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- *  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- *  POSSIBILITY OF SUCH DAMAGE.
- */
-
 #ifndef ESEKFOM_EKF_HPP
 #define ESEKFOM_EKF_HPP
 
-
 #include <vector>
 #include <cstdlib>
-
 #include <boost/bind.hpp>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
-
 #include "../mtk/types/vect.hpp"
 #include "../mtk/types/SOn.hpp"
 #include "../mtk/types/S2.hpp"
@@ -54,14 +17,13 @@
 
 //#define USE_sparse
 
+//  Annotated by zlwang  2022.9
 
 namespace esekfom {
 
 using namespace Eigen;
 
-//used for iterated error state EKF update
-//for the aim to calculate  measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) and the noise covariance (R) at the same time, by only one function.
-//applied for measurement as a manifold.
+//没用到
 template<typename S, typename M, int measurement_noise_dof = M::DOF>
 struct share_datastruct
 {
@@ -73,24 +35,21 @@ struct share_datastruct
 	Eigen::Matrix<typename S::scalar, measurement_noise_dof, measurement_noise_dof> R;
 };
 
-//used for iterated error state EKF update
-//for the aim to calculate  measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) and the noise covariance (R) at the same time, by only one function.
-//applied for measurement as an Eigen matrix whose dimension is changing
+
 template<typename T>
 struct dyn_share_datastruct
 {
 	bool valid;
 	bool converge;
-	Eigen::Matrix<T, Eigen::Dynamic, 1> z;
-	Eigen::Matrix<T, Eigen::Dynamic, 1> h;
+	Eigen::Matrix<T, Eigen::Dynamic, 1> z;		//残差
+	Eigen::Matrix<T, Eigen::Dynamic, 1> h;		
 	Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> h_v;
 	Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> h_x;
 	Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> R;
 };
 
-//used for iterated error state EKF update
-//for the aim to calculate  measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) and the noise covariance (R) at the same time, by only one function.
-//applied for measurement as a dynamic manifold whose dimension or type is changing
+
+//没用到
 template<typename T>
 struct dyn_runtime_share_datastruct
 {
@@ -102,26 +61,31 @@ struct dyn_runtime_share_datastruct
 	Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> R;
 };
 
-template<typename state, int process_noise_dof, typename input = state, typename measurement=state, int measurement_noise_dof=0>
+//esekf类  例如在IMU_Processing.hpp中：esekfom::esekf<state_ikfom, 12, input_ikfom>  后面两个模板参数缺省
+// 其中state_ikfom是状态变量(23维)，input_ikfom是输入u(6维)，也就是IMU的实际测量值    它们在use-ikfom.hpp中定义  
+// state = state_ikfom  process_noise_dof = 12  input = input_ikfom
+template<typename state, int process_noise_dof, typename input = state, typename measurement=state, int measurement_noise_dof=0>  
 class esekf{
 
-	typedef esekf self;
+	typedef esekf self; 
 	enum{
-		n = state::DOF, m = state::DIM, l = measurement::DOF
+		n = state::DOF, m = state::DIM, l = measurement::DOF     //n=23  m=24  l=23
 	};
 
 public:
-	
-	typedef typename state::scalar scalar_type;
-	typedef Matrix<scalar_type, n, n> cov;
-	typedef Matrix<scalar_type, m, n> cov_;
+	//typedef创建了存在类型的别名，而typename告诉编译器state::scalare是一个类型而不是一个成员
+	typedef typename state::scalar scalar_type;     //实际上就是scalar_type就是double (https://www.jianshu.com/p/5c02cfd6b497 打印变量类型)
+	typedef Matrix<scalar_type, n, n> cov;			//23X23的协方差矩阵  最终进行正向传播的矩阵Fx_final(因为状态量x是n维的)  和下面的cov相比主要是在predict函数中减少了一行
+	typedef Matrix<scalar_type, m, n> cov_;			//24X23的协方差矩阵  初始根据论文中定义的矩阵Fx   
 	typedef SparseMatrix<scalar_type> spMt;
-	typedef Matrix<scalar_type, n, 1> vectorized_state;
-	typedef Matrix<scalar_type, m, 1> flatted_state;
-	typedef flatted_state processModel(state &, const input &);
-	typedef Eigen::Matrix<scalar_type, m, n> processMatrix1(state &, const input &);
-	typedef Eigen::Matrix<scalar_type, m, process_noise_dof> processMatrix2(state &, const input &);
-	typedef Eigen::Matrix<scalar_type, process_noise_dof, process_noise_dof> processnoisecovariance;
+	typedef Matrix<scalar_type, n, 1> vectorized_state;    //23X1的向量化的状态变量
+	typedef Matrix<scalar_type, m, 1> flatted_state;	   //24X1的向量   对应公式(3)的f
+
+	typedef flatted_state processModel(state &, const input &);     // 对应公式(3)的f   f与状态量x和输入u有关
+	typedef Eigen::Matrix<scalar_type, m, n> processMatrix1(state &, const input &);	// 对应公式(7)的Fx（24X23）   Fx与状态量x和输入u有关
+	typedef Eigen::Matrix<scalar_type, m, process_noise_dof> processMatrix2(state &, const input &);	// 对应公式(7)的Fw（24X12）   Fw与状态量x和输入u有关
+	typedef Eigen::Matrix<scalar_type, process_noise_dof, process_noise_dof> processnoisecovariance;	// 对应公式(8)的Q（12X12） 噪声协方差矩阵
+
 	typedef measurement measurementModel(state &, bool &);
 	typedef measurement measurementModel_share(state &, share_datastruct<state, measurement, measurement_noise_dof> &);
 	typedef Eigen::Matrix<scalar_type, Eigen::Dynamic, 1> measurementModel_dyn(state &, bool &);
@@ -135,7 +99,7 @@ public:
 	typedef Eigen::Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic> measurementnoisecovariance_dyn;
 
 	esekf(const state &x = state(),
-		const cov  &P = cov::Identity()): x_(x), P_(P){
+		const cov  &P = cov::Identity()): x_(x), P_(P){     //传入初始状态量x 以及初始协方差矩阵P=I
 	#ifdef USE_sparse
 		SparseMatrix<scalar_type> ref(n, n);
 		ref.setIdentity();
@@ -145,8 +109,7 @@ public:
 	#endif
 	};
 
-	//receive system-specific models and their differentions.
-	//for measurement as a manifold.
+	//没用到
 	void init(processModel f_in, processMatrix1 f_x_in, processMatrix2 f_w_in, measurementModel h_in, measurementMatrix1 h_x_in, measurementMatrix2 h_v_in, int maximum_iteration, scalar_type limit_vector[n])
 	{
 		f = f_in;
@@ -167,8 +130,7 @@ public:
 		x_.build_vect_state();
 	}
 
-	//receive system-specific models and their differentions.
-	//for measurement as an Eigen matrix whose dimention is chaing.
+	//没用到
 	void init_dyn(processModel f_in, processMatrix1 f_x_in, processMatrix2 f_w_in, measurementModel_dyn h_in, measurementMatrix1_dyn h_x_in, measurementMatrix2_dyn h_v_in, int maximum_iteration, scalar_type limit_vector[n])
 	{
 		f = f_in;
@@ -190,8 +152,7 @@ public:
 		x_.build_vect_state();
 	}
 
-	//receive system-specific models and their differentions.
-	//for measurement as a dynamic manifold whose dimension or type is changing.
+	//没用到
 	void init_dyn_runtime(processModel f_in, processMatrix1 f_x_in, processMatrix2 f_w_in, measurementMatrix1_dyn h_x_in, measurementMatrix2_dyn h_v_in, int maximum_iteration, scalar_type limit_vector[n])
 	{
 		f = f_in;
@@ -211,9 +172,7 @@ public:
 		x_.build_vect_state();
 	}
 
-	//receive system-specific models and their differentions
-	//for measurement as a manifold.
-	//calculate  measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) and the noise covariance (R) at the same time, by only one function (h_share_in).
+	//没用到
 	void init_share(processModel f_in, processMatrix1 f_x_in, processMatrix2 f_w_in, measurementModel_share h_share_in, int maximum_iteration, scalar_type limit_vector[n])
 	{
 		f = f_in;
@@ -235,12 +194,16 @@ public:
 	//receive system-specific models and their differentions
 	//for measurement as an Eigen matrix whose dimension is changing.
 	//calculate  measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) and the noise covariance (R) at the same time, by only one function (h_dyn_share_in).
+
+	// 初始化各个矩阵的计算方式（也就是计算各个矩阵的函数）
+	// 在laserMapping中使用：kf.init_dyn_share(get_f, df_dx, df_dw, h_share_model, NUM_MAX_ITERATIONS, epsi); 
+	// f_in对应公式(3)中的f		f_x_in对应公式(7)中的Fx		f_w_in对应公式(7)中的Fw		
 	void init_dyn_share(processModel f_in, processMatrix1 f_x_in, processMatrix2 f_w_in, measurementModel_dyn_share h_dyn_share_in, int maximum_iteration, scalar_type limit_vector[n])
 	{
-		f = f_in;
-		f_x = f_x_in;
-		f_w = f_w_in;
-		h_dyn_share = h_dyn_share_in;
+		f = f_in;             //传入计算向量f的函数
+		f_x = f_x_in;		  //传入矩阵Fx的函数
+		f_w = f_w_in;		  //传入矩阵Fw的函数
+		h_dyn_share = h_dyn_share_in;    
 
 		maximum_iter = maximum_iteration;
 		for(int i=0; i<n; i++)
@@ -254,10 +217,7 @@ public:
 	}
 
 
-	//receive system-specific models and their differentions
-	//for measurement as a dynamic manifold whose dimension  or type is changing.
-	//calculate  measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) and the noise covariance (R) at the same time, by only one function (h_dyn_share_in).
-	//for any scenarios where it is needed
+	//没用到
 	void init_dyn_runtime_share(processModel f_in, processMatrix1 f_x_in, processMatrix2 f_w_in, int maximum_iteration, scalar_type limit_vector[n])
 	{
 		f = f_in;
@@ -275,36 +235,40 @@ public:
 		x_.build_vect_state();
 	}
 
-	// iterated error state EKF propogation
+	// iterated error state EKF propogation  前向传播
 	void predict(double &dt, processnoisecovariance &Q, const input &i_in){
-		flatted_state f_ = f(x_, i_in);
-		cov_ f_x_ = f_x(x_, i_in);
+		flatted_state f_ = f(x_, i_in);   //公式(3)  实际上f = f_in = get_f()
+		cov_ f_x_ = f_x(x_, i_in);		  //公式(7)  实际上f_x = f_x_in = df_dx()
 		cov f_x_final;
 
-		Matrix<scalar_type, m, process_noise_dof> f_w_ = f_w(x_, i_in);
+		Matrix<scalar_type, m, process_noise_dof> f_w_ = f_w(x_, i_in);  //公式(7)  实际上f_w = f_w_in = df_dw()
 		Matrix<scalar_type, n, process_noise_dof> f_w_final;
-		state x_before = x_;
-		x_.oplus(f_, dt);
+		state x_before = x_;	//先把当前帧的状态量x存着
+		x_.oplus(f_, dt);    //前向传播积分  公式(4)  计算得到新的状态量x_
 
 		F_x1 = cov::Identity();
+		//这里也可以用 auto it = x_.vect_state.begin()
+		//对于f_x_final矩阵，状态变量中为向量的行数  直接赋值 f_x_final = f_x_
 		for (std::vector<std::pair<std::pair<int, int>, int> >::iterator it = x_.vect_state.begin(); it != x_.vect_state.end(); it++) {
-			int idx = (*it).first.first;
-			int dim = (*it).first.second;
-			int dof = (*it).second;
-			for(int i = 0; i < n; i++){
-				for(int j=0; j<dof; j++)
+			int idx = (*it).first.first;     // idx = 0,9,12,15,18
+			int dim = (*it).first.second;	 // 这里实际上idx和dim一直是相等的
+			int dof = (*it).second;			// dof = 3
+			for(int i = 0; i < n; i++){    // n = 23 
+				for(int j=0; j<dof; j++)   // 这里的f_x_(dim+j, i)  对应除了旋转矩阵R，LIDAR和IMU的旋转矩阵，以及重力分量的行
 				{f_x_final(idx+j, i) = f_x_(dim+j, i);}	
 			}
-			for(int i = 0; i < process_noise_dof; i++){
+			for(int i = 0; i < process_noise_dof; i++){   // process_noise_dof = 12 
 				for(int j=0; j<dof; j++)
 				{f_w_final(idx+j, i) = f_w_(dim+j, i);}
 			}
 		}
+
 		Matrix<scalar_type, 3, 3> res_temp_SO3;
 		MTK::vect<3, scalar_type> seg_SO3;
+		//对于f_x_final矩阵，状态变量中为矩阵的行数  赋值 f_x_final = A(-f*dt) * f_x_
 		for (std::vector<std::pair<int, int> >::iterator it = x_.SO3_state.begin(); it != x_.SO3_state.end(); it++) {
-			int idx = (*it).first;
-			int dim = (*it).second;
+			int idx = (*it).first;		// idx = 3,6
+			int dim = (*it).second;		// 这里实际上idx和dim一直是相等的
 			for(int i = 0; i < 3; i++){
 				seg_SO3(i) = -1 * f_(dim + i) * dt;
 			}
@@ -320,9 +284,9 @@ public:
 		#else
 			F_x1.template block<3, 3>(idx, idx) = res.toRotationMatrix();
 		#endif			
-			res_temp_SO3 = MTK::A_matrix(seg_SO3);
+			res_temp_SO3 = MTK::A_matrix(seg_SO3);    //实际上打印出来的res_temp_SO3就是单位阵(或者说很接近单位阵)
 			for(int i = 0; i < n; i++){
-				f_x_final. template block<3, 1>(idx, i) = res_temp_SO3 * (f_x_. template block<3, 1>(dim, i));	
+				f_x_final. template block<3, 1>(idx, i) = res_temp_SO3 * (f_x_. template block<3, 1>(dim, i));	// f_x_final = A(-f*dt) * f_x_
 			}
 			for(int i = 0; i < process_noise_dof; i++){
 				f_w_final. template block<3, 1>(idx, i) = res_temp_SO3 * (f_w_. template block<3, 1>(dim, i));
@@ -333,15 +297,16 @@ public:
 		Matrix<scalar_type, 2, 3> res_temp_S2;
 		Matrix<scalar_type, 2, 2> res_temp_S2_;
 		MTK::vect<3, scalar_type> seg_S2;
+		//对于f_x_final矩阵，状态变量中为重力的行数 
 		for (std::vector<std::pair<int, int> >::iterator it = x_.S2_state.begin(); it != x_.S2_state.end(); it++) {
-			int idx = (*it).first;
+			int idx = (*it).first;	// idx = 21
 			int dim = (*it).second;
 			for(int i = 0; i < 3; i++){
-				seg_S2(i) = f_(dim + i) * dt;
+				seg_S2(i) = f_(dim + i) * dt;   //seg_S2 接近于 [0 0 0]
 			}
 			MTK::vect<2, scalar_type> vec = MTK::vect<2, scalar_type>::Zero();
 			MTK::SO3<scalar_type> res;
-			res.w() = MTK::exp<scalar_type, 3>(res.vec(), seg_S2, scalar_type(1/2));
+			res.w() = MTK::exp<scalar_type, 3>(res.vec(), seg_S2, scalar_type(1/2));    //TODO ???
 			Eigen::Matrix<scalar_type, 2, 3> Nx;
 			Eigen::Matrix<scalar_type, 3, 2> Mx;
 			x_.S2_Nx_yy(Nx, idx);
@@ -359,7 +324,7 @@ public:
 
 			Eigen::Matrix<scalar_type, 3, 3> x_before_hat;
 			x_before.S2_hat(x_before_hat, idx);
-			res_temp_S2 = -Nx * res.toRotationMatrix() * x_before_hat*MTK::A_matrix(seg_S2).transpose();
+			res_temp_S2 = -Nx * res.toRotationMatrix() * x_before_hat*MTK::A_matrix(seg_S2).transpose();  //res_temp_SO3 接近于 [0 1 0;1 0 0]
 			
 			for(int i = 0; i < n; i++){
 				f_x_final. template block<2, 1>(idx, i) = res_temp_S2 * (f_x_. template block<3, 1>(dim, i));
@@ -377,12 +342,12 @@ public:
 		spMt xp = f_x_1 + f_x2 * dt;
 		P_ = xp * P_ * xp.transpose() + (f_w1 * dt) * Q * (f_w1 * dt).transpose();
 	#else
-		F_x1 += f_x_final * dt;
-		P_ = (F_x1) * P_ * (F_x1).transpose() + (dt * f_w_final) * Q * (dt * f_w_final).transpose();
+		F_x1 += f_x_final * dt;   //之前Fx矩阵里的项没加单位阵，没乘dt   这里补上
+		P_ = (F_x1) * P_ * (F_x1).transpose() + (dt * f_w_final) * Q * (dt * f_w_final).transpose();   //传播协方差矩阵，即公式(8)   之前的f_w_final也没乘dt 这里补上
 	#endif
 	}
 
-	//iterated error state EKF update for measurement as a manifold.
+	//没用到
 	void update_iterated(measurement& z, measurementnoisecovariance &R) {
 		
 		if(!(is_same<typename measurement::scalar, scalar_type>())){
@@ -587,8 +552,7 @@ public:
 		}
 	}
 
-	//iterated error state EKF update for measurement as a manifold.
-	//calculate measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) and the noise covariance (R) at the same time, by only one function.
+	//没用到
 	void update_iterated_share() {
 		
 		if(!(is_same<typename measurement::scalar, scalar_type>())){
@@ -798,7 +762,7 @@ public:
 		}
 	}
 
-	//iterated error state EKF update for measurement as an Eigen matrix whose dimension is changing.
+	//没用到
 	void update_iterated_dyn(Eigen::Matrix<scalar_type, Eigen::Dynamic, 1> z, measurementnoisecovariance_dyn R) {
 	
 		int t = 0;
@@ -996,8 +960,7 @@ public:
 			}
 		}
 	}
-	//iterated error state EKF update for measurement as an Eigen matrix whose dimension is changing.
-	//calculate measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) and the noise covariance (R) at the same time, by only one function.
+	//没用到
 	void update_iterated_dyn_share() {
 		
 		int t = 0;
@@ -1203,8 +1166,7 @@ public:
 		}
 	}
 
-	//iterated error state EKF update for measurement as a dynamic manifold, whose dimension or type is changing.
-	//the measurement and the measurement model are received in a dynamic manner.
+	//没用到
 	template<typename measurement_runtime, typename measurementModel_runtime>
 	void update_iterated_dyn_runtime(measurement_runtime z, measurementnoisecovariance_dyn R, measurementModel_runtime h_runtime) {
 	
@@ -1407,9 +1369,7 @@ public:
 		}
 	}
 
-	//iterated error state EKF update for measurement as a dynamic manifold, whose dimension or type is changing.
-	//the measurement and the measurement model are received in a dynamic manner.
-	//calculate measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) and the noise covariance (R) at the same time, by only one function.
+	//没用到
 	template<typename measurement_runtime, typename measurementModel_dyn_runtime_share>
 	void update_iterated_dyn_runtime_share(measurement_runtime z, measurementModel_dyn_runtime_share h) {
 		
@@ -1953,9 +1913,9 @@ public:
 		return P_;
 	}
 private:
-	state x_;
+	state x_;			//23维的状态变量x
 	measurement m_;
-	cov P_;
+	cov P_;				//23X23的协方差矩阵
 	spMt l_;
 	spMt f_x_1;
 	spMt f_x_2;
